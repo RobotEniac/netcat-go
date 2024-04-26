@@ -1,4 +1,4 @@
 .idea
-client/main
-server/main
-netcat/main
+client/client
+server/server
+netcat/netcat
