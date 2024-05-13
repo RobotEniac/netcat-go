@@ -13,11 +13,11 @@ import (
 	"time"
 )
 
-func udp_to_writer(conn *net.UDPConn, out io.Writer, listen bool) <-chan net.UDPAddr {
+func udpToWriter(conn *net.UDPConn, out io.Writer, listen bool) <-chan net.UDPAddr {
 	buf := make([]byte, 1024)
-	sync_channel := make(chan net.UDPAddr)
+	syncChannel := make(chan net.UDPAddr)
 	go func() {
-		defer close(sync_channel)
+		defer close(syncChannel)
 		var remoteAddr *net.UDPAddr
 		for {
 			n, addr, err := conn.ReadFromUDP(buf)
@@ -33,7 +33,7 @@ func udp_to_writer(conn *net.UDPConn, out io.Writer, listen bool) <-chan net.UDP
 					fmt.Printf("from %s: %s\n", addr, data)
 				} else {
 					remoteAddr = addr
-					sync_channel <- *remoteAddr
+					syncChannel <- *remoteAddr
 				}
 				continue
 			}
@@ -46,13 +46,13 @@ func udp_to_writer(conn *net.UDPConn, out io.Writer, listen bool) <-chan net.UDP
 			}
 		}
 	}()
-	return sync_channel
+	return syncChannel
 }
 
-func reader_to_udp(in io.Reader, conn *net.UDPConn, clientAddr net.UDPAddr, listen bool) <-chan net.UDPAddr {
-	sync_channel := make(chan net.UDPAddr)
+func readerToUdp(in io.Reader, conn *net.UDPConn, clientAddr net.UDPAddr, listen bool) <-chan net.UDPAddr {
+	syncChannel := make(chan net.UDPAddr)
 	go func() {
-		defer close(sync_channel)
+		defer close(syncChannel)
 		reader := bufio.NewReader(in)
 		first := true
 		for {
@@ -83,14 +83,14 @@ func reader_to_udp(in io.Reader, conn *net.UDPConn, clientAddr net.UDPAddr, list
 			}
 		}
 	}()
-	return sync_channel
+	return syncChannel
 }
 
-func udp_server_handle(conn *net.UDPConn) {
-	in_channel := udp_to_writer(conn, os.Stdout, true)
+func udpServerHandle(conn *net.UDPConn) {
+	in_channel := udpToWriter(conn, os.Stdout, true)
 	clientAddr := <-in_channel
 	fmt.Printf("from %s\n", clientAddr.String())
-	out_channel := reader_to_udp(os.Stdin, conn, clientAddr, true)
+	out_channel := readerToUdp(os.Stdin, conn, clientAddr, true)
 	select {
 	case <-in_channel:
 		fmt.Printf("connect closed\n")
@@ -99,20 +99,9 @@ func udp_server_handle(conn *net.UDPConn) {
 	}
 }
 
-func udp_client_handle(conn *net.UDPConn, serverAddr *net.UDPAddr) {
-	out_channel := reader_to_udp(os.Stdin, conn, *serverAddr, false)
-	in_channel := udp_to_writer(conn, os.Stdout, false)
-	select {
-	case <-in_channel:
-		fmt.Printf("connect closed\n")
-	case <-out_channel:
-		fmt.Printf("local terminated\n")
-	}
-}
-
-func udp_client_string_handle(conn *net.UDPConn, serverAddr *net.UDPAddr, w io.Reader) {
-	out_channel := reader_to_udp(w, conn, *serverAddr, false)
-	in_channel := udp_to_writer(conn, os.Stdout, false)
+func udpClientHandle(conn *net.UDPConn, serverAddr *net.UDPAddr, r io.Reader) {
+	out_channel := readerToUdp(r, conn, *serverAddr, false)
+	in_channel := udpToWriter(conn, os.Stdout, false)
 	select {
 	case <-in_channel:
 		fmt.Printf("connect closed\n")
@@ -142,7 +131,7 @@ func main() {
 			panic(err)
 		}
 		defer conn.Close()
-		udp_server_handle(conn)
+		udpServerHandle(conn)
 	} else {
 		addr, err := net.ResolveIPAddr("ip", *ip)
 		if err != nil {
@@ -158,7 +147,7 @@ func main() {
 		}
 		defer conn.Close()
 		if *count == 0 {
-			udp_client_handle(conn, &remote)
+			udpClientHandle(conn, &remote, os.Stdin)
 		} else {
 			sw := util.MakeStringWriter()
 			go func() {
@@ -169,7 +158,7 @@ func main() {
 					time.Sleep(time.Duration(*interval) * time.Second)
 				}
 			}()
-			udp_client_string_handle(conn, &remote, sw)
+			udpClientHandle(conn, &remote, sw)
 		}
 	}
 }
